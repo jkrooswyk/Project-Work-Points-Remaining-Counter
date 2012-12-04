@@ -1,0 +1,309 @@
+	<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+	<html>
+	  <head>
+	    <meta name="Name" content="Project Iteration Summary" />
+	    <meta name="Version" content="1.1" />
+	    <meta name="Vendor" content="Rally Software" />
+        <meta name="Author" content="Barry Mullan, modified for iterations by Joel Krooswyk"/>
+	    <!-- default libraries -->
+	    <script type="text/javascript" src="/apps/1.29/sdk.js"></script> 
+	    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.4.3/jquery.min.js"></script>
+	    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.6/jquery-ui.min.js"></script>
+	    <script src="https://datejs.googlecode.com/files/date.js"></script>
+	    <script type='text/javascript' src='https://www.google.com/jsapi'></script>
+	
+	    
+		<script type="text/javascript">
+		var dropdown = null;
+		var rallyDataSource=null;
+		var parseString = "yyyy-MM-ddT00:00:00.000Z";
+	
+		google.load('visualization', '1', {packages:['table','corechart']});
+		google.setOnLoadCallback(function() {
+			
+		init();
+	
+	 	Date.prototype.setISO8601 = function (string) {
+		    var regexp = "([0-9]{4})(-([0-9]{2})(-([0-9]{2})" +
+		        "(T([0-9]{2}):([0-9]{2})(:([0-9]{2})(\.([0-9]+))?)?" +
+		        "(Z|(([-+])([0-9]{2}):([0-9]{2})))?)?)?)?";
+		    var d = string.match(new RegExp(regexp));
+		
+		    var offset = 0;
+		    var date = new Date(d[1], 0, 1);
+		
+		    if (d[3]) { date.setMonth(d[3] - 1); }
+		    if (d[5]) { date.setDate(d[5]); }
+		    if (d[7]) { date.setHours(d[7]); }
+		    if (d[8]) { date.setMinutes(d[8]); }
+		    if (d[10]) { date.setSeconds(d[10]); }
+		    if (d[12]) { date.setMilliseconds(Number("0." + d[12]) * 1000); }
+		    if (d[14]) {
+		        offset = (Number(d[16]) * 60) + Number(d[17]);
+		        offset *= ((d[15] == '-') ? 1 : -1);
+		    }
+		
+		    offset -= date.getTimezoneOffset();
+		    time = (Number(date) + (offset * 60 * 1000));
+		    this.setTime(Number(time));
+		}
+		
+		function convertRallyDate(rallyDate) {
+			var d = new Date();
+			d.setISO8601(rallyDate);
+			return d;
+		}
+	 
+	 	function compareRallyDates(a,b) {
+	 		var aDate = convertRallyDate(a);
+	 		var bDate = convertRallyDate(b);
+	 		if (aDate < bDate)
+	 			return -1;
+	 		if (aDate > bDate)
+	 			return 1;
+	 		return 0;
+	 	}
+		
+		function drawTable(data,div) {
+			// draw the table		
+			var table = new google.visualization.Table(document.getElementById(div));
+			table.draw(data, {showRowNumber: false, allowHtml : true});
+		}
+		
+		function indexAt(arr,str) {
+			for(var x = 0; x < arr.length; x++)
+				if (arr[x] == str)
+					return x;
+			return -1;	
+		}
+	
+	 	function lastVerdict(values) { 
+	 		if (values.length>0)
+				return values[values.length-1];
+			else
+				return null;
+		}
+		
+		function count(values) {
+			return values.length;	
+		}
+
+		function first(values) {
+			return values[0];	
+		}
+		
+		function groupIterationTestCasesByVerdict(iteration, data) {
+			// data=  iteration,tcid,date,verdict
+			var verdictGroup = google.visualization.data.group(data, 
+	 		                     [0,3], 
+	 		                    [{'column': 2, 'aggregation': count, 'type': 'number','label':'count'}]
+			);
+			return verdictGroup;
+		}
+		
+		function logTable(data) {
+			for (var r = 0 ; r < data.getNumberOfRows(); r++ ) {
+				var msg = "";
+				for (var c = 0 ; c < data.getNumberOfColumns(); c++) {
+						msg+= (data.getValue(r,c)+" : ");
+				}
+				log( msg+"<br/>");
+			}	
+		}
+	
+		function groupProjectIteration(data) {
+console.log(data);
+			var projectGroup = google.visualization.data.group(data, 
+	 			[0,1], 
+	 		    [{'column': 2, 'aggregation': first, 'type': 'date','label':'Start Date'},
+				 {'column': 3, 'aggregation': first, 'type': 'date','label':'End Date'},
+                 {'column': 4, 'aggregation': first, 'type': 'number','label':'Planned Points'},
+		         {'column': 5, 'aggregation': google.visualization.data.sum, 'type': 'number','label':'Plan Estimate'},
+	 		     //{'column': 6, 'aggregation': google.visualization.data.sum, 'type': 'number','label':'Task Estimate'},
+	 		     //{'column': 7, 'aggregation': google.visualization.data.sum, 'type': 'number','label':'Task Remaining'},
+	 		     //{'column': 6, 'aggregation': google.visualization.data.sum, 'type': 'number','label':'Scheduled Story Count'},
+	 		     //{'column': 7, 'aggregation': google.visualization.data.sum, 'type': 'number','label':'Accepted Story Count'},
+	 		   	 {'column': 6, 'aggregation': google.visualization.data.sum, 'type': 'number','label':'Accepted Points'},
+	 		     {'column': 7, 'aggregation': google.visualization.data.avg, 'type': 'number','label':'Accepted %'},
+  	 		     {'column': 8, 'aggregation': google.visualization.data.sum, 'type': 'number','label':'Remaining Points'}
+	 		    ]
+			);
+			return projectGroup;
+		}
+
+		function addRows(data,artifacts,iterations) {
+			
+			for ( var i = 0 ; i < artifacts.length ; i++ ) {
+				var s = artifacts[i];
+				var r = iterations[i];
+				data.addRow([
+					s.Project.Name,
+					s.Iteration.Name,
+					((typeof r!='undefined')?convertRallyDate(r.StartDate):null),
+					((typeof r!='undefined')?convertRallyDate(r.EndDate):null),
+					((typeof r!='undefined')?r.Resources:null),
+					s.PlanEstimate,
+					//s.TaskEstimateTotal,
+					//s.TaskRemainingTotal,
+					//1,
+					//(s.ScheduleState=="Accepted"?1:0),
+					(s.ScheduleState=="Accepted"?s.PlanEstimate:0),
+					0,
+					(s.ScheduleState!="Accepted"?s.PlanEstimate:0)
+				]);
+			}
+		}
+		
+		function checkForEmptyIterations(data,iterations) {
+		
+		
+			// check for empty current iterations
+			for (var i = 0 ; i < iterations.length; i++) {
+				var iteration = iterations[i];
+				// only interested in leaf node projects
+				if (iteration.Project.Children.length == 0) {
+					// now check to see if we have added this one already.	
+					var found = false;
+					for (var x = 0 ; x < data.getNumberOfRows(); x++) {
+						if ( iteration.Name == data.getValue(x,1) &&
+							 iteration.Project.Name == data.getValue(x,0))
+							 found = true;
+					}
+					if (!found) {
+						data.addRow([
+						iteration.Project.Name,
+						iteration.Name,
+						convertRallyDate(iteration.StartDate),
+						convertRallyDate(iteration.EndDate),
+						iteration.Resources,
+						//0,
+						//0,
+						//0,
+						//0,
+						0,
+						0,
+						0,
+						0
+						]);
+					}
+				}
+			}
+		}
+
+	 	function populateApp(results) {
+	 		//log("Stories:"+results.stories.length);
+	  		//log("Defects:"+results.defects.length);
+	  		//log("Iterations:"+results.alliterations.length);
+	 		$("#spinner").remove();
+	 		
+			var resultsData = new google.visualization.DataTable();
+			resultsData.addColumn('string', 'Project');			// 0
+			resultsData.addColumn('string', 'Iteration Name');			// 1
+			resultsData.addColumn('date'  , 'Start Date');				// 2
+			resultsData.addColumn('date'  , 'End Date');			// 3
+			resultsData.addColumn('number', 'Resources');		// 4
+			resultsData.addColumn('number', 'Plan Estimate');	// 5
+			//resultsData.addColumn('number', 'Task Estimate');	// 6
+			//resultsData.addColumn('number', 'Task Remaining');	// 7
+			//resultsData.addColumn('number', 'Scheduled Count');		// 8
+			//resultsData.addColumn('number', 'Accepted Count');		// 9
+			resultsData.addColumn('number', 'Accepted Points');	// 10
+			resultsData.addColumn('number', 'Accepted %');		// 11
+			resultsData.addColumn('number', 'Remaining Points');// 12
+
+			addRows(resultsData,results.stories,results.iterations);
+			addRows(resultsData,results.defects,results.defectiterations);
+			
+			var projectGroup = groupProjectIteration(resultsData);
+			
+			// calculate % accepted
+			//log(projectGroup.getNumberOfRows());
+			for (var r = 0; r < projectGroup.getNumberOfRows(); r++) {
+				var totalPlan = projectGroup.getValue(r,5);
+				var acceptedPlan = projectGroup.getValue(r,6);
+				var pctAccepted = totalPlan > 0 ? Math.round( (acceptedPlan / totalPlan) *100 ) : 0;
+				projectGroup.setValue(r,7, pctAccepted);	
+			}
+			//log("check");
+			checkForEmptyIterations(projectGroup, results.alliterations);
+			
+			
+			var formatter = new google.visualization.BarFormat({width: 80,max:100});
+  			formatter.format(projectGroup, 7); // Apply formatter to second column
+
+			
+			drawTable(projectGroup,"iteration-group");
+	 	}
+	 
+		function runQuery(){
+			
+			var today = new Date().toString("yyyy-MM-ddT00:00:00.000Z");
+	
+			//var query = '(( Iteration.StartDate <= ' + today + ' ) and ( Iteration.EndDate >= ' + today + ' ) )';
+            var query = '( Iteration.StartDate <= ' + today + ' )';
+			var iteration_query = '(( StartDate <= ' + today + ' ) and ( EndDate >= ' + today + ' ) )';
+	 		
+	 		log(query);
+	 		
+			var queryArray = new Array();
+			queryArray.push( {
+				key: 'stories',
+				type: 'hierarchicalrequirement',
+				query: query,
+				order: '',
+				fetch: 'ObjectID,FormattedID,Name,Project,Iteration,StartDate,EndDate,PlanEstimate,TaskEstimateTotal,TaskRemainingTotal,ScheduleState'					
+			});
+			queryArray.push( {
+				key: 'defects',
+				type: 'defect',
+				query: query,
+				order: '',
+				fetch: 'ObjectID,FormattedID,Name,Project,Iteration,StartDate,EndDate,PlanEstimate,TaskEstimateTotal,TaskRemainingTotal,ScheduleState'			});
+			queryArray.push({
+				key  : 'iterations',
+				placeholder: '${stories.Iteration?fetch=StartDate,EndDate,Resources}'
+			});
+			queryArray.push({
+				key  : 'defectiterations',
+				placeholder: '${stories.Iteration?fetch=StartDate,EndDate,Resources}'
+			});
+
+			queryArray.push( {
+				key: 'alliterations',
+				type: 'iteration',
+				//query: iteration_query,
+				order: '',
+				fetch: 'Name,StartDate,EndDate,Resources,Project,Children'});
+
+			$("#log").append('<img id="spinner" src="/slm/images/icon_spinner.gif"/>');
+	
+			rallyDataSource.findAll(queryArray, populateApp);                                                             
+		}
+		
+		function init() {
+		
+			rallyDataSource = new rally.sdk.data.RallyDataSource('__WORKSPACE_OID__',
+	                                                             '__PROJECT_OID__',
+	                                                             '__PROJECT_SCOPING_UP__',
+	                                                             '__PROJECT_SCOPING_DOWN__');
+	                                                             
+			runQuery();	                                                       
+		}
+	
+		function log(msg) {
+			//$("#log").append("<p>"+msg);	
+		}
+	});	
+	
+		
+	</script>
+	    <!-- end mashup script -->
+	  </head>
+	  <body>
+	     <div id="iteration"></div>
+	     <div id="iteration-group"></div>
+
+	     <div id="log"></div>
+	
+	  </body>
+	</html>
