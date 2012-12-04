@@ -11,5 +11,5 @@ Screenshot:<P>
 The second app shows status of each iteration for this project, its current status, and points planned versus accepted.
 <P>
 Screenshot:<P>
-![Alt text](https://github.com/jkrooswyk/Project-Work-Points-Remaining-Counter/raw/master/Screenshot - Project Iteration summary.png)
+![Alt text](https://github.com/jkrooswyk/Project-Work-Points-Remaining-Counter/raw/master/Screenshot - Project Iteration Summary.png)
 
